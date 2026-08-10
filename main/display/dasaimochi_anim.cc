@@ -1,5 +1,6 @@
 #include "dasaimochi_anim.h"
 #include <esp_log.h>
+#include <esp_heap_caps.h>
 #include <cstring>
 #include <cstdlib>
 #include <cmath>
@@ -175,11 +176,13 @@ void DasaimochiAnim::Init(int width, int height) {
     if (!frame_buffer_) {
         frame_buffer_ = (uint8_t*)malloc(buf_size);
     }
-    memset(frame_buffer_, 0, buf_size);
+    if (frame_buffer_) {
+        memset(frame_buffer_, 0, buf_size);
+    }
 
+    memset(&frame_dsc_, 0, sizeof(lv_img_dsc_t));
     frame_dsc_.header.magic = LV_IMAGE_HEADER_MAGIC;
-    frame_dsc_.header.cf = LV_COLOR_FORMAT_L8;
-    frame_dsc_.header.flags = 0;
+    frame_dsc_.header.cf = LV_COLOR_FORMAT_A8;
     frame_dsc_.header.w = width_;
     frame_dsc_.header.h = height_;
     frame_dsc_.header.stride = width_;
@@ -203,7 +206,6 @@ void DasaimochiAnim::RenderFrame() {
     if (!frame_buffer_) return;
     memset(frame_buffer_, 0, width_ * height_);
 
-    // Authentic Dasai Mochi proportions
     int eye_dist = 50;
     int eye_left_x = 64 - eye_dist / 2;  // 39
     int eye_right_x = 64 + eye_dist / 2; // 89
@@ -248,7 +250,6 @@ void DasaimochiAnim::RenderFrame() {
 
             DrawBlush(frame_buffer_, width_, height_, blush_left_x, blush_y, true);
             DrawBlush(frame_buffer_, width_, height_, blush_right_x, blush_y, false);
-            DrawSmileMouth(frame_buffer_, width_, height_, mouth_x, mouth_y - 2, 4);
             break;
         }
 
@@ -333,7 +334,7 @@ const lv_img_dsc_t* DasaimochiAnim::GetNextFrame() {
 }
 
 DasaimochiState DasaimochiAnim::MapEmotionToState(const char* emotion) {
-    if (!emotion) return DASAIMOCHI_IDLE;
+    if (!emotion || emotion[0] == '\0') return DASAIMOCHI_IDLE;
     std::string em = emotion;
     if (em == "neutral" || em == "robot_1" || em == "robot_2") return DASAIMOCHI_IDLE;
     if (em == "listening") return DASAIMOCHI_LISTENING;
