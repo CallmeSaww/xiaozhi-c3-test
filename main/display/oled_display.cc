@@ -178,6 +178,7 @@ void OledDisplay::SetupUI_128x64() {
 
     auto screen = lv_screen_active();
     lv_obj_set_style_bg_color(screen, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
 
     /* Container */
     container_ = lv_obj_create(screen);
@@ -185,6 +186,7 @@ void OledDisplay::SetupUI_128x64() {
     lv_obj_set_style_pad_all(container_, 0, 0);
     lv_obj_set_style_border_width(container_, 0, 0);
     lv_obj_set_style_bg_color(container_, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(container_, LV_OPA_COVER, 0);
     lv_obj_set_scrollbar_mode(container_, LV_SCROLLBAR_MODE_OFF);
 
     // Dummy hidden labels to avoid null pointers if base classes reference them
@@ -199,6 +201,10 @@ void OledDisplay::SetupUI_128x64() {
     dasaimochi_anim_.Init(128, 64);
     emotion_img_ = lv_image_create(container_);
     lv_obj_set_size(emotion_img_, 128, 64);
+    lv_obj_set_style_bg_opa(emotion_img_, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_image_recolor(emotion_img_, lv_color_white(), 0);
+    lv_obj_set_style_image_recolor_opa(emotion_img_, LV_OPA_COVER, 0);
+
     const lv_img_dsc_t* init_dsc = dasaimochi_anim_.GetNextFrame();
     if (init_dsc != nullptr) {
         lv_image_set_src(emotion_img_, init_dsc);
@@ -223,6 +229,7 @@ void OledDisplay::SetupUI_128x32() {
 
     auto screen = lv_screen_active();
     lv_obj_set_style_bg_color(screen, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
 
     /* Container */
     container_ = lv_obj_create(screen);
@@ -230,6 +237,7 @@ void OledDisplay::SetupUI_128x32() {
     lv_obj_set_style_pad_all(container_, 0, 0);
     lv_obj_set_style_border_width(container_, 0, 0);
     lv_obj_set_style_bg_color(container_, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(container_, LV_OPA_COVER, 0);
     lv_obj_set_scrollbar_mode(container_, LV_SCROLLBAR_MODE_OFF);
 
     status_label_ = lv_label_create(container_);
@@ -242,6 +250,10 @@ void OledDisplay::SetupUI_128x32() {
     dasaimochi_anim_.Init(128, 32);
     emotion_img_ = lv_image_create(container_);
     lv_obj_set_size(emotion_img_, 128, 32);
+    lv_obj_set_style_bg_opa(emotion_img_, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_image_recolor(emotion_img_, lv_color_white(), 0);
+    lv_obj_set_style_image_recolor_opa(emotion_img_, LV_OPA_COVER, 0);
+
     const lv_img_dsc_t* init_dsc = dasaimochi_anim_.GetNextFrame();
     if (init_dsc != nullptr) {
         lv_image_set_src(emotion_img_, init_dsc);
