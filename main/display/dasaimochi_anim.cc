@@ -34,7 +34,8 @@ void DrawFilledCircle(uint8_t* buf, int w, int h, int cx, int cy, int r, uint8_t
     }
 }
 
-void DrawPill(uint8_t* buf, int w, int h, int cx, int cy, int pw, int ph, uint8_t val) {
+// Authentic Dasai Mochi Pill Eye with smooth corner rounding
+void DrawDasaiPill(uint8_t* buf, int w, int h, int cx, int cy, int pw, int ph, uint8_t val) {
     if (pw <= 0 || ph <= 0) return;
     int x0 = cx - pw / 2;
     int y0 = cy - ph / 2;
@@ -42,24 +43,18 @@ void DrawPill(uint8_t* buf, int w, int h, int cx, int cy, int pw, int ph, uint8_
         DrawFilledRect(buf, w, h, x0, y0, pw, ph, val);
         return;
     }
-    int r = std::min(pw / 2, 4);
-    // Middle rect
+    int r = std::min(pw / 2, 6);
     DrawFilledRect(buf, w, h, x0, y0 + r, pw, ph - 2 * r, val);
-    // Top and bottom rounded caps
     for (int dy = 0; dy < r; dy++) {
-        int inset = r - dy;
+        int inset = r - (int)std::sqrt(std::max(0, r * r - (r - dy) * (r - dy)));
         DrawFilledRect(buf, w, h, x0 + inset, y0 + dy, pw - 2 * inset, 1, val);
         DrawFilledRect(buf, w, h, x0 + inset, y0 + ph - 1 - dy, pw - 2 * inset, 1, val);
     }
 }
 
-void DrawEyeWithCatchlight(uint8_t* buf, int w, int h, int cx, int cy, int ew, int eh, int pupil_shift_x = 0, int pupil_shift_y = 0) {
-    // Draw white eye body
-    DrawPill(buf, w, h, cx, cy, ew, eh, 0xFF);
-
-    // Draw cute inner black pupil and catchlight if eye is tall enough
-    if (eh >= 12 && ew >= 8) {
-        // Catchlight (black cutout or highlight sparkle)
+void DrawDasaiEye(uint8_t* buf, int w, int h, int cx, int cy, int ew, int eh, int pupil_shift_x = 0, int pupil_shift_y = 0) {
+    DrawDasaiPill(buf, w, h, cx, cy, ew, eh, 0xFF);
+    if (eh >= 14 && ew >= 10) {
         int hx = cx + ew / 4 + pupil_shift_x;
         int hy = cy - eh / 4 + pupil_shift_y;
         SetPixel(buf, w, h, hx, hy, 0x00);
@@ -71,7 +66,7 @@ void DrawEyeWithCatchlight(uint8_t* buf, int w, int h, int cx, int cy, int ew, i
 
 void DrawHappyEyeArc(uint8_t* buf, int w, int h, int cx, int cy, int radius) {
     for (int dx = -radius; dx <= radius; dx++) {
-        int dy = radius - std::abs(dx);
+        int dy = (int)std::sqrt(std::max(0, radius * radius - dx * dx));
         SetPixel(buf, w, h, cx + dx, cy - dy, 0xFF);
         SetPixel(buf, w, h, cx + dx, cy - dy + 1, 0xFF);
         SetPixel(buf, w, h, cx + dx, cy - dy + 2, 0xFF);
@@ -80,15 +75,14 @@ void DrawHappyEyeArc(uint8_t* buf, int w, int h, int cx, int cy, int radius) {
 
 void DrawSleepyEyeArc(uint8_t* buf, int w, int h, int cx, int cy, int radius) {
     for (int dx = -radius; dx <= radius; dx++) {
-        int dy = radius - std::abs(dx);
+        int dy = (int)std::sqrt(std::max(0, radius * radius - dx * dx));
         SetPixel(buf, w, h, cx + dx, cy + dy - 2, 0xFF);
         SetPixel(buf, w, h, cx + dx, cy + dy - 1, 0xFF);
         SetPixel(buf, w, h, cx + dx, cy + dy, 0xFF);
     }
 }
 
-void DrawBlushStripes(uint8_t* buf, int w, int h, int cx, int cy, bool left_side) {
-    // 3 cute diagonal blush lines
+void DrawBlush(uint8_t* buf, int w, int h, int cx, int cy, bool left_side) {
     int dir = left_side ? 1 : -1;
     for (int i = -1; i <= 1; i++) {
         int sx = cx + i * 4;
@@ -100,25 +94,11 @@ void DrawBlushStripes(uint8_t* buf, int w, int h, int cx, int cy, bool left_side
     }
 }
 
-void DrawCatMouth(uint8_t* buf, int w, int h, int cx, int cy) {
-    // Cute :3 / w mouth
-    // Left curve
-    SetPixel(buf, w, h, cx - 4, cy - 1, 0xFF);
-    SetPixel(buf, w, h, cx - 3, cy, 0xFF);
-    SetPixel(buf, w, h, cx - 2, cy, 0xFF);
-    SetPixel(buf, w, h, cx - 1, cy - 1, 0xFF);
-    // Right curve
-    SetPixel(buf, w, h, cx, cy - 1, 0xFF);
-    SetPixel(buf, w, h, cx + 1, cy, 0xFF);
-    SetPixel(buf, w, h, cx + 2, cy, 0xFF);
-    SetPixel(buf, w, h, cx + 3, cy - 1, 0xFF);
-}
-
 void DrawSmileMouth(uint8_t* buf, int w, int h, int cx, int cy, int radius) {
     for (int dx = -radius; dx <= radius; dx++) {
-        int dy = radius - std::abs(dx);
+        int dy = (int)std::sqrt(std::max(0, radius * radius - dx * dx));
+        SetPixel(buf, w, h, cx + dx, cy + dy - 1, 0xFF);
         SetPixel(buf, w, h, cx + dx, cy + dy, 0xFF);
-        SetPixel(buf, w, h, cx + dx, cy + dy + 1, 0xFF);
     }
 }
 
@@ -127,11 +107,22 @@ void DrawOpenMouth(uint8_t* buf, int w, int h, int cx, int cy, int mw, int mh) {
     int ry = mh / 2;
     for (int y = -ry; y <= ry; y++) {
         for (int x = -rx; x <= rx; x++) {
-            if (x * x * ry * ry + y * y * rx * rx <= rx * rx * ry * ry) {
+            if ((rx > 0 && ry > 0) && (x * x * ry * ry + y * y * rx * rx) <= (rx * rx * ry * ry)) {
                 SetPixel(buf, w, h, cx + x, cy + y, 0xFF);
             }
         }
     }
+}
+
+void DrawCatMouth(uint8_t* buf, int w, int h, int cx, int cy) {
+    SetPixel(buf, w, h, cx - 4, cy - 1, 0xFF);
+    SetPixel(buf, w, h, cx - 3, cy, 0xFF);
+    SetPixel(buf, w, h, cx - 2, cy, 0xFF);
+    SetPixel(buf, w, h, cx - 1, cy - 1, 0xFF);
+    SetPixel(buf, w, h, cx, cy - 1, 0xFF);
+    SetPixel(buf, w, h, cx + 1, cy, 0xFF);
+    SetPixel(buf, w, h, cx + 2, cy, 0xFF);
+    SetPixel(buf, w, h, cx + 3, cy - 1, 0xFF);
 }
 
 void DrawZ(uint8_t* buf, int w, int h, int x, int y, int size) {
@@ -150,10 +141,10 @@ void DrawThinkingDots(uint8_t* buf, int w, int h, int x, int y, int frame) {
 }
 
 void DrawSparkle(uint8_t* buf, int w, int h, int cx, int cy) {
-    SetPixel(buf, w, h, cx, cy - 2, 0xFF);
-    SetPixel(buf, w, h, cx, cy + 2, 0xFF);
-    SetPixel(buf, w, h, cx - 2, cy, 0xFF);
-    SetPixel(buf, w, h, cx + 2, cy, 0xFF);
+    SetPixel(buf, w, h, cx, cy - 3, 0xFF);
+    SetPixel(buf, w, h, cx, cy + 3, 0xFF);
+    SetPixel(buf, w, h, cx - 3, cy, 0xFF);
+    SetPixel(buf, w, h, cx + 3, cy, 0xFF);
     DrawFilledRect(buf, w, h, cx - 1, cy - 1, 3, 3, 0xFF);
 }
 
@@ -212,28 +203,28 @@ void DasaimochiAnim::RenderFrame() {
     if (!frame_buffer_) return;
     memset(frame_buffer_, 0, width_ * height_);
 
-    // Base eye centers and dimensions for 128x64 screen
-    int eye_left_x = 38;
-    int eye_right_x = 90;
-    int eye_y = 28;
-    int eye_w = 14;
-    int eye_h = 24;
+    // Authentic Dasai Mochi proportions
+    int eye_dist = 50;
+    int eye_left_x = 64 - eye_dist / 2;  // 39
+    int eye_right_x = 64 + eye_dist / 2; // 89
+    int eye_y = 32;
+    int eye_w = 16;
+    int eye_h = 28;
 
-    int blush_left_x = 18;
-    int blush_right_x = 110;
-    int blush_y = 44;
+    int blush_left_x = eye_left_x - eye_w / 2 - 6;
+    int blush_right_x = eye_right_x + eye_w / 2 + 6;
+    int blush_y = 48;
 
     int mouth_x = 64;
-    int mouth_y = 44;
+    int mouth_y = 48;
 
     tick_count_++;
 
     switch (current_state_) {
         case DASAIMOCHI_IDLE: {
-            // Natural blinking: blink every ~3.0 seconds (30 ticks of 100ms)
             blink_timer_++;
             if (blink_timer_ > 28) {
-                blink_stage_ = blink_timer_ - 28; // 1, 2, 3
+                blink_stage_ = blink_timer_ - 28;
                 if (blink_stage_ > 3) {
                     blink_timer_ = 0;
                     blink_stage_ = 0;
@@ -243,115 +234,87 @@ void DasaimochiAnim::RenderFrame() {
             }
 
             int cur_eh = eye_h;
-            if (blink_stage_ == 1) cur_eh = 14;      // Closing
-            else if (blink_stage_ == 2) cur_eh = 3;  // Closed slit
-            else if (blink_stage_ == 3) cur_eh = 16; // Opening
+            if (blink_stage_ == 1) cur_eh = (int)(eye_h * 0.45);
+            else if (blink_stage_ == 2) cur_eh = 3;
+            else if (blink_stage_ == 3) cur_eh = (int)(eye_h * 0.65);
 
             if (cur_eh <= 3) {
-                DrawPill(frame_buffer_, width_, height_, eye_left_x, eye_y + 4, eye_w, 3, 0xFF);
-                DrawPill(frame_buffer_, width_, height_, eye_right_x, eye_y + 4, eye_w, 3, 0xFF);
+                DrawDasaiPill(frame_buffer_, width_, height_, eye_left_x, eye_y + 4, eye_w, 3, 0xFF);
+                DrawDasaiPill(frame_buffer_, width_, height_, eye_right_x, eye_y + 4, eye_w, 3, 0xFF);
             } else {
-                DrawEyeWithCatchlight(frame_buffer_, width_, height_, eye_left_x, eye_y, eye_w, cur_eh);
-                DrawEyeWithCatchlight(frame_buffer_, width_, height_, eye_right_x, eye_y, eye_w, cur_eh);
+                DrawDasaiEye(frame_buffer_, width_, height_, eye_left_x, eye_y, eye_w, cur_eh);
+                DrawDasaiEye(frame_buffer_, width_, height_, eye_right_x, eye_y, eye_w, cur_eh);
             }
 
-            // Blushing cheeks
-            DrawBlushStripes(frame_buffer_, width_, height_, blush_left_x, blush_y, true);
-            DrawBlushStripes(frame_buffer_, width_, height_, blush_right_x, blush_y, false);
-
-            // Small cute smile mouth
+            DrawBlush(frame_buffer_, width_, height_, blush_left_x, blush_y, true);
+            DrawBlush(frame_buffer_, width_, height_, blush_right_x, blush_y, false);
             DrawSmileMouth(frame_buffer_, width_, height_, mouth_x, mouth_y - 2, 4);
             break;
         }
 
         case DASAIMOCHI_LISTENING: {
-            // Big attentive eyes with extra sparkles
-            DrawEyeWithCatchlight(frame_buffer_, width_, height_, eye_left_x, eye_y, eye_w + 2, eye_h + 2);
-            DrawEyeWithCatchlight(frame_buffer_, width_, height_, eye_right_x, eye_y, eye_w + 2, eye_h + 2);
+            DrawDasaiEye(frame_buffer_, width_, height_, eye_left_x, eye_y, eye_w + 2, eye_h + 2);
+            DrawDasaiEye(frame_buffer_, width_, height_, eye_right_x, eye_y, eye_w + 2, eye_h + 2);
 
-            // Sparkles near eyes
             if ((tick_count_ / 2) % 2 == 0) {
-                DrawSparkle(frame_buffer_, width_, height_, eye_left_x - 14, eye_y - 10);
-                DrawSparkle(frame_buffer_, width_, height_, eye_right_x + 14, eye_y - 10);
+                DrawSparkle(frame_buffer_, width_, height_, eye_left_x - 16, eye_y - 12);
+                DrawSparkle(frame_buffer_, width_, height_, eye_right_x + 16, eye_y - 12);
             }
 
-            // Curious small 'o' mouth
             DrawOpenMouth(frame_buffer_, width_, height_, mouth_x, mouth_y, 6, 6);
-
-            // Blush
-            DrawBlushStripes(frame_buffer_, width_, height_, blush_left_x, blush_y, true);
-            DrawBlushStripes(frame_buffer_, width_, height_, blush_right_x, blush_y, false);
+            DrawBlush(frame_buffer_, width_, height_, blush_left_x, blush_y, true);
+            DrawBlush(frame_buffer_, width_, height_, blush_right_x, blush_y, false);
             break;
         }
 
         case DASAIMOCHI_SPEAKING: {
-            // Eyes bounce slightly with speech
             int bounce = ((tick_count_ / 2) % 2 == 0) ? 1 : 0;
-            DrawEyeWithCatchlight(frame_buffer_, width_, height_, eye_left_x, eye_y - bounce, eye_w, eye_h - 2);
-            DrawEyeWithCatchlight(frame_buffer_, width_, height_, eye_right_x, eye_y - bounce, eye_w, eye_h - 2);
+            DrawDasaiEye(frame_buffer_, width_, height_, eye_left_x, eye_y - bounce, eye_w, eye_h - 2);
+            DrawDasaiEye(frame_buffer_, width_, height_, eye_right_x, eye_y - bounce, eye_w, eye_h - 2);
 
-            // Mouth animation cycle (talking open/close)
             int mouth_phase = (tick_count_ / 2) % 4;
-            if (mouth_phase == 0) {
-                DrawOpenMouth(frame_buffer_, width_, height_, mouth_x, mouth_y, 8, 5);
-            } else if (mouth_phase == 1) {
-                DrawOpenMouth(frame_buffer_, width_, height_, mouth_x, mouth_y, 12, 8);
-            } else if (mouth_phase == 2) {
-                DrawOpenMouth(frame_buffer_, width_, height_, mouth_x, mouth_y, 14, 11);
-            } else {
-                DrawSmileMouth(frame_buffer_, width_, height_, mouth_x, mouth_y, 5);
-            }
+            if (mouth_phase == 0) DrawOpenMouth(frame_buffer_, width_, height_, mouth_x, mouth_y, 8, 5);
+            else if (mouth_phase == 1) DrawOpenMouth(frame_buffer_, width_, height_, mouth_x, mouth_y, 12, 8);
+            else if (mouth_phase == 2) DrawOpenMouth(frame_buffer_, width_, height_, mouth_x, mouth_y, 14, 11);
+            else DrawSmileMouth(frame_buffer_, width_, height_, mouth_x, mouth_y, 5);
 
-            // Blush
-            DrawBlushStripes(frame_buffer_, width_, height_, blush_left_x, blush_y - bounce, true);
-            DrawBlushStripes(frame_buffer_, width_, height_, blush_right_x, blush_y - bounce, false);
+            DrawBlush(frame_buffer_, width_, height_, blush_left_x, blush_y - bounce, true);
+            DrawBlush(frame_buffer_, width_, height_, blush_right_x, blush_y - bounce, false);
             break;
         }
 
         case DASAIMOCHI_THINKING: {
-            // Eyes looking up-right
-            DrawEyeWithCatchlight(frame_buffer_, width_, height_, eye_left_x + 4, eye_y - 4, eye_w, eye_h - 4, 2, -2);
-            DrawEyeWithCatchlight(frame_buffer_, width_, height_, eye_right_x + 4, eye_y - 4, eye_w, eye_h - 4, 2, -2);
+            DrawDasaiEye(frame_buffer_, width_, height_, eye_left_x + 4, eye_y - 4, eye_w, eye_h - 4, 2, -2);
+            DrawDasaiEye(frame_buffer_, width_, height_, eye_right_x + 4, eye_y - 4, eye_w, eye_h - 4, 2, -2);
 
-            // Thinking animated bubbles in top-right
             int dot_frame = (tick_count_ / 3) % 3;
             DrawThinkingDots(frame_buffer_, width_, height_, 104, 12, dot_frame);
-
-            // Tilted small mouth
             DrawSmileMouth(frame_buffer_, width_, height_, mouth_x + 2, mouth_y, 3);
 
-            // Blush
-            DrawBlushStripes(frame_buffer_, width_, height_, blush_left_x, blush_y, true);
-            DrawBlushStripes(frame_buffer_, width_, height_, blush_right_x, blush_y, false);
+            DrawBlush(frame_buffer_, width_, height_, blush_left_x, blush_y, true);
+            DrawBlush(frame_buffer_, width_, height_, blush_right_x, blush_y, false);
             break;
         }
 
         case DASAIMOCHI_HAPPY: {
-            // Happy crescent eyes ^ ^
-            DrawHappyEyeArc(frame_buffer_, width_, height_, eye_left_x, eye_y + 4, 8);
-            DrawHappyEyeArc(frame_buffer_, width_, height_, eye_right_x, eye_y + 4, 8);
+            DrawHappyEyeArc(frame_buffer_, width_, height_, eye_left_x, eye_y + 4, 9);
+            DrawHappyEyeArc(frame_buffer_, width_, height_, eye_right_x, eye_y + 4, 9);
 
-            // Big open smile
             DrawSmileMouth(frame_buffer_, width_, height_, mouth_x, mouth_y - 2, 7);
-
-            // Bright blush
-            DrawBlushStripes(frame_buffer_, width_, height_, blush_left_x, blush_y, true);
-            DrawBlushStripes(frame_buffer_, width_, height_, blush_right_x, blush_y, false);
+            DrawBlush(frame_buffer_, width_, height_, blush_left_x, blush_y, true);
+            DrawBlush(frame_buffer_, width_, height_, blush_right_x, blush_y, false);
             break;
         }
 
         case DASAIMOCHI_SLEEPING: {
-            // Peaceful sleeping curved eyes u u
-            DrawSleepyEyeArc(frame_buffer_, width_, height_, eye_left_x, eye_y + 4, 6);
-            DrawSleepyEyeArc(frame_buffer_, width_, height_, eye_right_x, eye_y + 4, 6);
+            DrawSleepyEyeArc(frame_buffer_, width_, height_, eye_left_x, eye_y + 4, 7);
+            DrawSleepyEyeArc(frame_buffer_, width_, height_, eye_right_x, eye_y + 4, 7);
 
-            // Floating Zzz animated
             int z_anim = (tick_count_ / 3) % 4;
             DrawZ(frame_buffer_, width_, height_, 100, 18 - z_anim, 4);
             DrawZ(frame_buffer_, width_, height_, 108, 12 - z_anim, 6);
             DrawZ(frame_buffer_, width_, height_, 116, 6 - z_anim, 8);
 
-            // Calm small mouth
             DrawCatMouth(frame_buffer_, width_, height_, mouth_x, mouth_y);
             break;
         }
