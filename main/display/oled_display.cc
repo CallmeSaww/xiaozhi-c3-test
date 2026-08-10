@@ -279,7 +279,6 @@ void OledDisplay::SetupUI_128x64() {
         dasaimochi_timer_ = lv_timer_create([](lv_timer_t* timer) {
             OledDisplay* self = static_cast<OledDisplay*>(lv_timer_get_user_data(timer));
             if (self && self->emotion_img_) {
-                DisplayLockGuard lock(self);
                 const lv_img_dsc_t* dsc = self->dasaimochi_anim_.GetNextFrame();
                 if (dsc) {
                     lv_image_set_src(self->emotion_img_, dsc);
@@ -362,7 +361,6 @@ void OledDisplay::SetupUI_128x32() {
         dasaimochi_timer_ = lv_timer_create([](lv_timer_t* timer) {
             OledDisplay* self = static_cast<OledDisplay*>(lv_timer_get_user_data(timer));
             if (self && self->emotion_img_) {
-                DisplayLockGuard lock(self);
                 const lv_img_dsc_t* dsc = self->dasaimochi_anim_.GetNextFrame();
                 if (dsc) {
                     lv_image_set_src(self->emotion_img_, dsc);
