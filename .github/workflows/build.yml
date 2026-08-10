@@ -31,9 +31,9 @@ jobs:
           source $IDF_PATH/export.sh
           idf.py set-target esp32c3
           echo "CONFIG_BOARD_TYPE_XMINI_C3=y" >> sdkconfig
-          echo "CONFIG_PM_ENABLE=y" >> sdkconfig
-          echo "CONFIG_FREERTOS_USE_TICKLESS_IDLE=y" >> sdkconfig
-          echo "CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y" >> sdkconfig
+          echo "CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y" >> sdkconfig
+          echo "CONFIG_PARTITION_TABLE_CUSTOM=y" >> sdkconfig
+          echo "CONFIG_PARTITION_TABLE_CUSTOM_FILENAME=\"partitions/v2/4m.csv\"" >> sdkconfig
           idf.py build
 
       - name: Upload firmware artifact
