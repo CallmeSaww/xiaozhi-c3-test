@@ -1568,12 +1568,9 @@ def build_board(
         _emit_build_stage("compiling")
         _run_idf("build", preview=preview)
 
-        # merge-bin
-        _emit_build_stage("packaging")
-        merge_bin(preview)
-
-        if create_zip:
-            zip_bin(final_name, project_version)
+        # Packaging / completion
+        _emit_build_stage("completed")
+        print(f"[SUCCESS] Built variant {final_name} successfully!")
 
 ################################################################################
 # CLI entry
