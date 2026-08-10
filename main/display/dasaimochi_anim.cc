@@ -2,6 +2,7 @@
 #include <esp_log.h>
 #include <cstring>
 #include <cstdlib>
+#include <cmath>
 #include <algorithm>
 #include <string>
 
@@ -9,110 +10,151 @@
 
 namespace {
 
-inline void SetPixel(uint8_t* buf, int x, int y, uint8_t val) {
-    if (x >= 0 && x < 32 && y >= 0 && y < 32) {
-        buf[y * 32 + x] = val;
+inline void SetPixel(uint8_t* buf, int w, int h, int x, int y, uint8_t val) {
+    if (x >= 0 && x < w && y >= 0 && y < h) {
+        buf[y * w + x] = val;
     }
 }
 
-void DrawFilledRect(uint8_t* buf, int x, int y, int w, int h, uint8_t val) {
-    for (int ry = y; ry < y + h; ry++) {
-        for (int rx = x; rx < x + w; rx++) {
-            SetPixel(buf, rx, ry, val);
+void DrawFilledRect(uint8_t* buf, int w, int h, int x, int y, int rw, int rh, uint8_t val) {
+    for (int ry = y; ry < y + rh; ry++) {
+        for (int rx = x; rx < x + rw; rx++) {
+            SetPixel(buf, w, h, rx, ry, val);
         }
     }
 }
 
-void DrawPillEye(uint8_t* buf, int x, int y, int w, int h, bool pupil_highlight) {
-    if (h <= 0 || w <= 0) return;
-    if (h <= 3) {
-        DrawFilledRect(buf, x, y, w, h, 0xFF);
+void DrawFilledCircle(uint8_t* buf, int w, int h, int cx, int cy, int r, uint8_t val) {
+    for (int y = -r; y <= r; y++) {
+        for (int x = -r; x <= r; x++) {
+            if (x * x + y * y <= r * r) {
+                SetPixel(buf, w, h, cx + x, cy + y, val);
+            }
+        }
+    }
+}
+
+void DrawPill(uint8_t* buf, int w, int h, int cx, int cy, int pw, int ph, uint8_t val) {
+    if (pw <= 0 || ph <= 0) return;
+    int x0 = cx - pw / 2;
+    int y0 = cy - ph / 2;
+    if (ph <= 4) {
+        DrawFilledRect(buf, w, h, x0, y0, pw, ph, val);
         return;
     }
-    // Vertical capsule (pill)
-    DrawFilledRect(buf, x, y + 2, w, h - 4, 0xFF);
-    DrawFilledRect(buf, x + 1, y + 1, w - 2, h - 2, 0xFF);
-    DrawFilledRect(buf, x + 2, y, w - 4, h, 0xFF);
-
-    // Pupil highlight in top-right
-    if (pupil_highlight && w >= 6 && h >= 8) {
-        SetPixel(buf, x + w - 3, y + 2, 0x00);
-        SetPixel(buf, x + w - 2, y + 2, 0x00);
-        SetPixel(buf, x + w - 3, y + 3, 0x00);
-        SetPixel(buf, x + w - 2, y + 3, 0x00);
+    int r = std::min(pw / 2, 4);
+    // Middle rect
+    DrawFilledRect(buf, w, h, x0, y0 + r, pw, ph - 2 * r, val);
+    // Top and bottom rounded caps
+    for (int dy = 0; dy < r; dy++) {
+        int inset = r - dy;
+        DrawFilledRect(buf, w, h, x0 + inset, y0 + dy, pw - 2 * inset, 1, val);
+        DrawFilledRect(buf, w, h, x0 + inset, y0 + ph - 1 - dy, pw - 2 * inset, 1, val);
     }
 }
 
-void DrawArcEye(uint8_t* buf, int cx, int cy, int radius) {
+void DrawEyeWithCatchlight(uint8_t* buf, int w, int h, int cx, int cy, int ew, int eh, int pupil_shift_x = 0, int pupil_shift_y = 0) {
+    // Draw white eye body
+    DrawPill(buf, w, h, cx, cy, ew, eh, 0xFF);
+
+    // Draw cute inner black pupil and catchlight if eye is tall enough
+    if (eh >= 12 && ew >= 8) {
+        // Catchlight (black cutout or highlight sparkle)
+        int hx = cx + ew / 4 + pupil_shift_x;
+        int hy = cy - eh / 4 + pupil_shift_y;
+        SetPixel(buf, w, h, hx, hy, 0x00);
+        SetPixel(buf, w, h, hx + 1, hy, 0x00);
+        SetPixel(buf, w, h, hx, hy + 1, 0x00);
+        SetPixel(buf, w, h, hx + 1, hy + 1, 0x00);
+    }
+}
+
+void DrawHappyEyeArc(uint8_t* buf, int w, int h, int cx, int cy, int radius) {
     for (int dx = -radius; dx <= radius; dx++) {
         int dy = radius - std::abs(dx);
-        SetPixel(buf, cx + dx, cy - dy, 0xFF);
-        SetPixel(buf, cx + dx, cy - dy + 1, 0xFF);
+        SetPixel(buf, w, h, cx + dx, cy - dy, 0xFF);
+        SetPixel(buf, w, h, cx + dx, cy - dy + 1, 0xFF);
+        SetPixel(buf, w, h, cx + dx, cy - dy + 2, 0xFF);
     }
 }
 
-void DrawHeartEye(uint8_t* buf, int cx, int cy) {
-    static const int heart[7][7] = {
-        {0, 1, 1, 0, 1, 1, 0},
-        {1, 1, 1, 1, 1, 1, 1},
-        {1, 1, 1, 1, 1, 1, 1},
-        {0, 1, 1, 1, 1, 1, 0},
-        {0, 0, 1, 1, 1, 0, 0},
-        {0, 0, 0, 1, 0, 0, 0},
-        {0, 0, 0, 0, 0, 0, 0}
-    };
-    for (int r = 0; r < 7; r++) {
-        for (int c = 0; c < 7; c++) {
-            if (heart[r][c]) {
-                SetPixel(buf, cx - 3 + c, cy - 3 + r, 0xFF);
-            }
+void DrawSleepyEyeArc(uint8_t* buf, int w, int h, int cx, int cy, int radius) {
+    for (int dx = -radius; dx <= radius; dx++) {
+        int dy = radius - std::abs(dx);
+        SetPixel(buf, w, h, cx + dx, cy + dy - 2, 0xFF);
+        SetPixel(buf, w, h, cx + dx, cy + dy - 1, 0xFF);
+        SetPixel(buf, w, h, cx + dx, cy + dy, 0xFF);
+    }
+}
+
+void DrawBlushStripes(uint8_t* buf, int w, int h, int cx, int cy, bool left_side) {
+    // 3 cute diagonal blush lines
+    int dir = left_side ? 1 : -1;
+    for (int i = -1; i <= 1; i++) {
+        int sx = cx + i * 4;
+        int sy = cy;
+        for (int step = -2; step <= 2; step++) {
+            SetPixel(buf, w, h, sx + step * dir, sy + step, 0xFF);
+            SetPixel(buf, w, h, sx + step * dir + 1, sy + step, 0xFF);
         }
     }
 }
 
-void DrawStarEye(uint8_t* buf, int cx, int cy) {
-    static const int star[7][7] = {
-        {0, 0, 0, 1, 0, 0, 0},
-        {0, 1, 1, 1, 1, 1, 0},
-        {0, 0, 1, 1, 1, 0, 0},
-        {1, 1, 1, 1, 1, 1, 1},
-        {0, 0, 1, 1, 1, 0, 0},
-        {0, 1, 0, 0, 0, 1, 0},
-        {1, 0, 0, 0, 0, 0, 1}
-    };
-    for (int r = 0; r < 7; r++) {
-        for (int c = 0; c < 7; c++) {
-            if (star[r][c]) {
-                SetPixel(buf, cx - 3 + c, cy - 3 + r, 0xFF);
-            }
-        }
+void DrawCatMouth(uint8_t* buf, int w, int h, int cx, int cy) {
+    // Cute :3 / w mouth
+    // Left curve
+    SetPixel(buf, w, h, cx - 4, cy - 1, 0xFF);
+    SetPixel(buf, w, h, cx - 3, cy, 0xFF);
+    SetPixel(buf, w, h, cx - 2, cy, 0xFF);
+    SetPixel(buf, w, h, cx - 1, cy - 1, 0xFF);
+    // Right curve
+    SetPixel(buf, w, h, cx, cy - 1, 0xFF);
+    SetPixel(buf, w, h, cx + 1, cy, 0xFF);
+    SetPixel(buf, w, h, cx + 2, cy, 0xFF);
+    SetPixel(buf, w, h, cx + 3, cy - 1, 0xFF);
+}
+
+void DrawSmileMouth(uint8_t* buf, int w, int h, int cx, int cy, int radius) {
+    for (int dx = -radius; dx <= radius; dx++) {
+        int dy = radius - std::abs(dx);
+        SetPixel(buf, w, h, cx + dx, cy + dy, 0xFF);
+        SetPixel(buf, w, h, cx + dx, cy + dy + 1, 0xFF);
     }
 }
 
-void DrawMouth(uint8_t* buf, int cx, int cy, int rx, int ry) {
+void DrawOpenMouth(uint8_t* buf, int w, int h, int cx, int cy, int mw, int mh) {
+    int rx = mw / 2;
+    int ry = mh / 2;
     for (int y = -ry; y <= ry; y++) {
         for (int x = -rx; x <= rx; x++) {
-            if ((rx > 0 && ry > 0) && (x * x * ry * ry + y * y * rx * rx) <= (rx * rx * ry * ry)) {
-                SetPixel(buf, cx + x, cy + y, 0xFF);
+            if (x * x * ry * ry + y * y * rx * rx <= rx * rx * ry * ry) {
+                SetPixel(buf, w, h, cx + x, cy + y, 0xFF);
             }
         }
     }
 }
 
-void DrawZzz(uint8_t* buf, int x, int y, int size) {
-    if (size == 1) { // Small 'z'
-        DrawFilledRect(buf, x, y, 4, 1, 0xFF);
-        SetPixel(buf, x + 2, y + 1, 0xFF);
-        SetPixel(buf, x + 1, y + 2, 0xFF);
-        DrawFilledRect(buf, x, y + 3, 4, 1, 0xFF);
-    } else { // Large 'Z'
-        DrawFilledRect(buf, x, y, 6, 1, 0xFF);
-        SetPixel(buf, x + 4, y + 1, 0xFF);
-        SetPixel(buf, x + 3, y + 2, 0xFF);
-        SetPixel(buf, x + 2, y + 3, 0xFF);
-        SetPixel(buf, x + 1, y + 4, 0xFF);
-        DrawFilledRect(buf, x, y + 5, 6, 1, 0xFF);
+void DrawZ(uint8_t* buf, int w, int h, int x, int y, int size) {
+    DrawFilledRect(buf, w, h, x, y, size, 1, 0xFF);
+    for (int i = 0; i < size; i++) {
+        SetPixel(buf, w, h, x + size - 1 - i, y + i, 0xFF);
     }
+    DrawFilledRect(buf, w, h, x, y + size - 1, size, 1, 0xFF);
+}
+
+void DrawThinkingDots(uint8_t* buf, int w, int h, int x, int y, int frame) {
+    for (int i = 0; i < 3; i++) {
+        int r = (frame == i) ? 3 : 2;
+        DrawFilledCircle(buf, w, h, x + i * 8, y - (frame == i ? 2 : 0), r, 0xFF);
+    }
+}
+
+void DrawSparkle(uint8_t* buf, int w, int h, int cx, int cy) {
+    SetPixel(buf, w, h, cx, cy - 2, 0xFF);
+    SetPixel(buf, w, h, cx, cy + 2, 0xFF);
+    SetPixel(buf, w, h, cx - 2, cy, 0xFF);
+    SetPixel(buf, w, h, cx + 2, cy, 0xFF);
+    DrawFilledRect(buf, w, h, cx - 1, cy - 1, 3, 3, 0xFF);
 }
 
 } // namespace
@@ -120,256 +162,239 @@ void DrawZzz(uint8_t* buf, int x, int y, int size) {
 DasaimochiAnim::DasaimochiAnim() {}
 
 DasaimochiAnim::~DasaimochiAnim() {
-    ClearFrames();
-}
-
-void DasaimochiAnim::ClearFrames() {
-    for (int s = 0; s < DASAIMOCHI_STATE_COUNT; s++) {
-        for (int f = 0; f < FRAMES_PER_STATE; f++) {
-            if (frame_buffers_[s][f] != nullptr) {
-                delete[] frame_buffers_[s][f];
-                frame_buffers_[s][f] = nullptr;
-            }
-        }
+    if (frame_buffer_ != nullptr) {
+        free(frame_buffer_);
+        frame_buffer_ = nullptr;
     }
-    initialized_ = false;
 }
 
-void DasaimochiAnim::Init() {
-    if (initialized_) return;
-    GenerateFrames();
+void DasaimochiAnim::Init(int width, int height) {
+    if (initialized_ && frame_buffer_ != nullptr && width_ == width && height_ == height) {
+        return;
+    }
+    width_ = width;
+    height_ = height;
+
+    if (frame_buffer_ != nullptr) {
+        free(frame_buffer_);
+    }
+
+    size_t buf_size = width_ * height_;
+    frame_buffer_ = (uint8_t*)heap_caps_malloc(buf_size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    if (!frame_buffer_) {
+        frame_buffer_ = (uint8_t*)malloc(buf_size);
+    }
+    memset(frame_buffer_, 0, buf_size);
+
+    frame_dsc_.header.magic = LV_IMAGE_HEADER_MAGIC;
+    frame_dsc_.header.cf = LV_COLOR_FORMAT_L8;
+    frame_dsc_.header.flags = 0;
+    frame_dsc_.header.w = width_;
+    frame_dsc_.header.h = height_;
+    frame_dsc_.header.stride = width_;
+    frame_dsc_.data_size = buf_size;
+    frame_dsc_.data = frame_buffer_;
+
     initialized_ = true;
-}
-
-void DasaimochiAnim::GenerateFrames() {
-    ClearFrames();
-
-    for (int s = 0; s < DASAIMOCHI_STATE_COUNT; s++) {
-        for (int f = 0; f < FRAMES_PER_STATE; f++) {
-            uint8_t* buf = new uint8_t[WIDTH * HEIGHT]();
-            frame_buffers_[s][f] = buf;
-
-            memset(&frame_dscs_[s][f], 0, sizeof(lv_img_dsc_t));
-            frame_dscs_[s][f].header.magic = LV_IMAGE_HEADER_MAGIC;
-            frame_dscs_[s][f].header.cf = LV_COLOR_FORMAT_A8;
-            frame_dscs_[s][f].header.w = WIDTH;
-            frame_dscs_[s][f].header.h = HEIGHT;
-            frame_dscs_[s][f].header.stride = WIDTH;
-            frame_dscs_[s][f].data = buf;
-            frame_dscs_[s][f].data_size = WIDTH * HEIGHT;
-        }
-    }
-
-    // --- State 0: IDLE (Blinking Pill Eyes) ---
-    // Frame 0: Open eyes
-    DrawPillEye(frame_buffers_[DASAIMOCHI_IDLE][0], 5, 8, 7, 16, true);
-    DrawPillEye(frame_buffers_[DASAIMOCHI_IDLE][0], 20, 8, 7, 16, true);
-
-    // Frame 1: Half-closed
-    DrawPillEye(frame_buffers_[DASAIMOCHI_IDLE][1], 5, 12, 7, 8, false);
-    DrawPillEye(frame_buffers_[DASAIMOCHI_IDLE][1], 20, 12, 7, 8, false);
-
-    // Frame 2: Closed
-    DrawFilledRect(frame_buffers_[DASAIMOCHI_IDLE][2], 4, 15, 9, 2, 0xFF);
-    DrawFilledRect(frame_buffers_[DASAIMOCHI_IDLE][2], 19, 15, 9, 2, 0xFF);
-
-    // Frame 3: Opening
-    DrawPillEye(frame_buffers_[DASAIMOCHI_IDLE][3], 5, 11, 7, 10, false);
-    DrawPillEye(frame_buffers_[DASAIMOCHI_IDLE][3], 20, 11, 7, 10, false);
-
-    // --- State 1: LISTENING (Curious Wide Eyes + Antenna Waves) ---
-    // Frame 0: Wide open eyes
-    DrawPillEye(frame_buffers_[DASAIMOCHI_LISTENING][0], 4, 7, 8, 18, true);
-    DrawPillEye(frame_buffers_[DASAIMOCHI_LISTENING][0], 20, 7, 8, 18, true);
-    // Waves: left (1, 12..20), right (30, 12..20)
-    DrawFilledRect(frame_buffers_[DASAIMOCHI_LISTENING][0], 1, 12, 1, 8, 0xFF);
-    DrawFilledRect(frame_buffers_[DASAIMOCHI_LISTENING][0], 30, 12, 1, 8, 0xFF);
-
-    // Frame 1: Eyes shift slightly up
-    DrawPillEye(frame_buffers_[DASAIMOCHI_LISTENING][1], 4, 5, 8, 18, true);
-    DrawPillEye(frame_buffers_[DASAIMOCHI_LISTENING][1], 20, 5, 8, 18, true);
-    DrawFilledRect(frame_buffers_[DASAIMOCHI_LISTENING][1], 0, 10, 2, 12, 0xFF);
-    DrawFilledRect(frame_buffers_[DASAIMOCHI_LISTENING][1], 30, 10, 2, 12, 0xFF);
-
-    // Frame 2: Happy arc eyes + antenna pulse
-    DrawArcEye(frame_buffers_[DASAIMOCHI_LISTENING][2], 8, 16, 4);
-    DrawArcEye(frame_buffers_[DASAIMOCHI_LISTENING][2], 24, 16, 4);
-    DrawFilledRect(frame_buffers_[DASAIMOCHI_LISTENING][2], 1, 12, 1, 8, 0xFF);
-    DrawFilledRect(frame_buffers_[DASAIMOCHI_LISTENING][2], 30, 12, 1, 8, 0xFF);
-
-    // Frame 3: Wide eyes + Wink right eye
-    DrawPillEye(frame_buffers_[DASAIMOCHI_LISTENING][3], 4, 7, 8, 18, true);
-    DrawArcEye(frame_buffers_[DASAIMOCHI_LISTENING][3], 24, 16, 4);
-
-    // --- State 2: SPEAKING (Talking Eyes & Mouth) ---
-    // Frame 0: Happy arc eyes + small mouth
-    DrawArcEye(frame_buffers_[DASAIMOCHI_SPEAKING][0], 8, 12, 4);
-    DrawArcEye(frame_buffers_[DASAIMOCHI_SPEAKING][0], 24, 12, 4);
-    DrawMouth(frame_buffers_[DASAIMOCHI_SPEAKING][0], 16, 23, 2, 2);
-
-    // Frame 1: Happy arc eyes + open mouth
-    DrawArcEye(frame_buffers_[DASAIMOCHI_SPEAKING][1], 8, 12, 4);
-    DrawArcEye(frame_buffers_[DASAIMOCHI_SPEAKING][1], 24, 12, 4);
-    DrawMouth(frame_buffers_[DASAIMOCHI_SPEAKING][1], 16, 23, 4, 4);
-
-    // Frame 2: Pill eyes + open mouth
-    DrawPillEye(frame_buffers_[DASAIMOCHI_SPEAKING][2], 5, 8, 7, 14, true);
-    DrawPillEye(frame_buffers_[DASAIMOCHI_SPEAKING][2], 20, 8, 7, 14, true);
-    DrawMouth(frame_buffers_[DASAIMOCHI_SPEAKING][2], 16, 24, 3, 4);
-
-    // Frame 3: Happy arc eyes + medium mouth
-    DrawArcEye(frame_buffers_[DASAIMOCHI_SPEAKING][3], 8, 12, 4);
-    DrawArcEye(frame_buffers_[DASAIMOCHI_SPEAKING][3], 24, 12, 4);
-    DrawMouth(frame_buffers_[DASAIMOCHI_SPEAKING][3], 16, 23, 3, 2);
-
-    // --- State 3: THINKING (Eyes Scanning Left to Right) ---
-    // Frame 0: Look Left
-    DrawPillEye(frame_buffers_[DASAIMOCHI_THINKING][0], 2, 9, 7, 15, true);
-    DrawPillEye(frame_buffers_[DASAIMOCHI_THINKING][0], 17, 9, 7, 15, true);
-
-    // Frame 1: Look Top-Left
-    DrawPillEye(frame_buffers_[DASAIMOCHI_THINKING][1], 2, 5, 7, 15, true);
-    DrawPillEye(frame_buffers_[DASAIMOCHI_THINKING][1], 17, 5, 7, 15, true);
-
-    // Frame 2: Look Right
-    DrawPillEye(frame_buffers_[DASAIMOCHI_THINKING][2], 8, 9, 7, 15, true);
-    DrawPillEye(frame_buffers_[DASAIMOCHI_THINKING][2], 23, 9, 7, 15, true);
-
-    // Frame 3: Look Top-Right
-    DrawPillEye(frame_buffers_[DASAIMOCHI_THINKING][3], 8, 5, 7, 15, true);
-    DrawPillEye(frame_buffers_[DASAIMOCHI_THINKING][3], 23, 5, 7, 15, true);
-
-    // --- State 4: HAPPY (Heart / Star / Bouncing Arc Eyes) ---
-    // Frame 0: Heart eyes
-    DrawHeartEye(frame_buffers_[DASAIMOCHI_HAPPY][0], 8, 14);
-    DrawHeartEye(frame_buffers_[DASAIMOCHI_HAPPY][0], 24, 14);
-
-    // Frame 1: High bouncing happy arcs
-    DrawArcEye(frame_buffers_[DASAIMOCHI_HAPPY][1], 8, 10, 5);
-    DrawArcEye(frame_buffers_[DASAIMOCHI_HAPPY][1], 24, 10, 5);
-
-    // Frame 2: Star eyes
-    DrawStarEye(frame_buffers_[DASAIMOCHI_HAPPY][2], 8, 14);
-    DrawStarEye(frame_buffers_[DASAIMOCHI_HAPPY][2], 24, 14);
-
-    // Frame 3: Standard happy arcs
-    DrawArcEye(frame_buffers_[DASAIMOCHI_HAPPY][3], 8, 14, 4);
-    DrawArcEye(frame_buffers_[DASAIMOCHI_HAPPY][3], 24, 14, 4);
-
-    // --- State 5: SLEEPING (Closed Eyes + Drifting Zzz) ---
-    // Frame 0: Closed 'u' eyes + small z
-    DrawArcEye(frame_buffers_[DASAIMOCHI_SLEEPING][0], 8, 18, 3);
-    DrawArcEye(frame_buffers_[DASAIMOCHI_SLEEPING][0], 24, 18, 3);
-    DrawZzz(frame_buffers_[DASAIMOCHI_SLEEPING][0], 25, 4, 1);
-
-    // Frame 1: Closed '-' eyes + large Z
-    DrawFilledRect(frame_buffers_[DASAIMOCHI_SLEEPING][1], 5, 17, 7, 2, 0xFF);
-    DrawFilledRect(frame_buffers_[DASAIMOCHI_SLEEPING][1], 20, 17, 7, 2, 0xFF);
-    DrawZzz(frame_buffers_[DASAIMOCHI_SLEEPING][1], 22, 2, 2);
-
-    // Frame 2: Closed 'u' eyes + small z higher
-    DrawArcEye(frame_buffers_[DASAIMOCHI_SLEEPING][2], 8, 18, 3);
-    DrawArcEye(frame_buffers_[DASAIMOCHI_SLEEPING][2], 24, 18, 3);
-    DrawZzz(frame_buffers_[DASAIMOCHI_SLEEPING][2], 26, 2, 1);
-
-    // Frame 3: Closed '-' eyes + large Z
-    DrawFilledRect(frame_buffers_[DASAIMOCHI_SLEEPING][3], 5, 17, 7, 2, 0xFF);
-    DrawFilledRect(frame_buffers_[DASAIMOCHI_SLEEPING][3], 20, 17, 7, 2, 0xFF);
-    DrawZzz(frame_buffers_[DASAIMOCHI_SLEEPING][3], 23, 4, 2);
+    ESP_LOGI(TAG, "DasaimochiAnim initialized with resolution %dx%d", width_, height_);
 }
 
 void DasaimochiAnim::SetState(DasaimochiState state) {
-    if (state < 0 || state >= DASAIMOCHI_STATE_COUNT) {
-        state = DASAIMOCHI_IDLE;
-    }
-    if (current_state_ != state) {
+    if (state != current_state_) {
         current_state_ = state;
-        current_frame_ = 0;
-        blink_counter_ = 0;
-        ESP_LOGI(TAG, "Switched Dasaimochi state to %d", static_cast<int>(state));
+        tick_count_ = 0;
+        blink_stage_ = 0;
+        blink_timer_ = 0;
+    }
+}
+
+void DasaimochiAnim::RenderFrame() {
+    if (!frame_buffer_) return;
+    memset(frame_buffer_, 0, width_ * height_);
+
+    // Base eye centers and dimensions for 128x64 screen
+    int eye_left_x = 38;
+    int eye_right_x = 90;
+    int eye_y = 28;
+    int eye_w = 14;
+    int eye_h = 24;
+
+    int blush_left_x = 18;
+    int blush_right_x = 110;
+    int blush_y = 44;
+
+    int mouth_x = 64;
+    int mouth_y = 44;
+
+    tick_count_++;
+
+    switch (current_state_) {
+        case DASAIMOCHI_IDLE: {
+            // Natural blinking: blink every ~3.0 seconds (30 ticks of 100ms)
+            blink_timer_++;
+            if (blink_timer_ > 28) {
+                blink_stage_ = blink_timer_ - 28; // 1, 2, 3
+                if (blink_stage_ > 3) {
+                    blink_timer_ = 0;
+                    blink_stage_ = 0;
+                }
+            } else {
+                blink_stage_ = 0;
+            }
+
+            int cur_eh = eye_h;
+            if (blink_stage_ == 1) cur_eh = 14;      // Closing
+            else if (blink_stage_ == 2) cur_eh = 3;  // Closed slit
+            else if (blink_stage_ == 3) cur_eh = 16; // Opening
+
+            if (cur_eh <= 3) {
+                DrawPill(frame_buffer_, width_, height_, eye_left_x, eye_y + 4, eye_w, 3, 0xFF);
+                DrawPill(frame_buffer_, width_, height_, eye_right_x, eye_y + 4, eye_w, 3, 0xFF);
+            } else {
+                DrawEyeWithCatchlight(frame_buffer_, width_, height_, eye_left_x, eye_y, eye_w, cur_eh);
+                DrawEyeWithCatchlight(frame_buffer_, width_, height_, eye_right_x, eye_y, eye_w, cur_eh);
+            }
+
+            // Blushing cheeks
+            DrawBlushStripes(frame_buffer_, width_, height_, blush_left_x, blush_y, true);
+            DrawBlushStripes(frame_buffer_, width_, height_, blush_right_x, blush_y, false);
+
+            // Small cute smile mouth
+            DrawSmileMouth(frame_buffer_, width_, height_, mouth_x, mouth_y - 2, 4);
+            break;
+        }
+
+        case DASAIMOCHI_LISTENING: {
+            // Big attentive eyes with extra sparkles
+            DrawEyeWithCatchlight(frame_buffer_, width_, height_, eye_left_x, eye_y, eye_w + 2, eye_h + 2);
+            DrawEyeWithCatchlight(frame_buffer_, width_, height_, eye_right_x, eye_y, eye_w + 2, eye_h + 2);
+
+            // Sparkles near eyes
+            if ((tick_count_ / 2) % 2 == 0) {
+                DrawSparkle(frame_buffer_, width_, height_, eye_left_x - 14, eye_y - 10);
+                DrawSparkle(frame_buffer_, width_, height_, eye_right_x + 14, eye_y - 10);
+            }
+
+            // Curious small 'o' mouth
+            DrawOpenMouth(frame_buffer_, width_, height_, mouth_x, mouth_y, 6, 6);
+
+            // Blush
+            DrawBlushStripes(frame_buffer_, width_, height_, blush_left_x, blush_y, true);
+            DrawBlushStripes(frame_buffer_, width_, height_, blush_right_x, blush_y, false);
+            break;
+        }
+
+        case DASAIMOCHI_SPEAKING: {
+            // Eyes bounce slightly with speech
+            int bounce = ((tick_count_ / 2) % 2 == 0) ? 1 : 0;
+            DrawEyeWithCatchlight(frame_buffer_, width_, height_, eye_left_x, eye_y - bounce, eye_w, eye_h - 2);
+            DrawEyeWithCatchlight(frame_buffer_, width_, height_, eye_right_x, eye_y - bounce, eye_w, eye_h - 2);
+
+            // Mouth animation cycle (talking open/close)
+            int mouth_phase = (tick_count_ / 2) % 4;
+            if (mouth_phase == 0) {
+                DrawOpenMouth(frame_buffer_, width_, height_, mouth_x, mouth_y, 8, 5);
+            } else if (mouth_phase == 1) {
+                DrawOpenMouth(frame_buffer_, width_, height_, mouth_x, mouth_y, 12, 8);
+            } else if (mouth_phase == 2) {
+                DrawOpenMouth(frame_buffer_, width_, height_, mouth_x, mouth_y, 14, 11);
+            } else {
+                DrawSmileMouth(frame_buffer_, width_, height_, mouth_x, mouth_y, 5);
+            }
+
+            // Blush
+            DrawBlushStripes(frame_buffer_, width_, height_, blush_left_x, blush_y - bounce, true);
+            DrawBlushStripes(frame_buffer_, width_, height_, blush_right_x, blush_y - bounce, false);
+            break;
+        }
+
+        case DASAIMOCHI_THINKING: {
+            // Eyes looking up-right
+            DrawEyeWithCatchlight(frame_buffer_, width_, height_, eye_left_x + 4, eye_y - 4, eye_w, eye_h - 4, 2, -2);
+            DrawEyeWithCatchlight(frame_buffer_, width_, height_, eye_right_x + 4, eye_y - 4, eye_w, eye_h - 4, 2, -2);
+
+            // Thinking animated bubbles in top-right
+            int dot_frame = (tick_count_ / 3) % 3;
+            DrawThinkingDots(frame_buffer_, width_, height_, 104, 12, dot_frame);
+
+            // Tilted small mouth
+            DrawSmileMouth(frame_buffer_, width_, height_, mouth_x + 2, mouth_y, 3);
+
+            // Blush
+            DrawBlushStripes(frame_buffer_, width_, height_, blush_left_x, blush_y, true);
+            DrawBlushStripes(frame_buffer_, width_, height_, blush_right_x, blush_y, false);
+            break;
+        }
+
+        case DASAIMOCHI_HAPPY: {
+            // Happy crescent eyes ^ ^
+            DrawHappyEyeArc(frame_buffer_, width_, height_, eye_left_x, eye_y + 4, 8);
+            DrawHappyEyeArc(frame_buffer_, width_, height_, eye_right_x, eye_y + 4, 8);
+
+            // Big open smile
+            DrawSmileMouth(frame_buffer_, width_, height_, mouth_x, mouth_y - 2, 7);
+
+            // Bright blush
+            DrawBlushStripes(frame_buffer_, width_, height_, blush_left_x, blush_y, true);
+            DrawBlushStripes(frame_buffer_, width_, height_, blush_right_x, blush_y, false);
+            break;
+        }
+
+        case DASAIMOCHI_SLEEPING: {
+            // Peaceful sleeping curved eyes u u
+            DrawSleepyEyeArc(frame_buffer_, width_, height_, eye_left_x, eye_y + 4, 6);
+            DrawSleepyEyeArc(frame_buffer_, width_, height_, eye_right_x, eye_y + 4, 6);
+
+            // Floating Zzz animated
+            int z_anim = (tick_count_ / 3) % 4;
+            DrawZ(frame_buffer_, width_, height_, 100, 18 - z_anim, 4);
+            DrawZ(frame_buffer_, width_, height_, 108, 12 - z_anim, 6);
+            DrawZ(frame_buffer_, width_, height_, 116, 6 - z_anim, 8);
+
+            // Calm small mouth
+            DrawCatMouth(frame_buffer_, width_, height_, mouth_x, mouth_y);
+            break;
+        }
+
+        default:
+            break;
     }
 }
 
 const lv_img_dsc_t* DasaimochiAnim::GetNextFrame() {
-    if (!initialized_) {
-        Init();
+    if (!initialized_ || !frame_buffer_) {
+        return nullptr;
     }
-
-    int frame_to_return = current_frame_;
-
-    if (current_state_ == DASAIMOCHI_IDLE) {
-        // Natural blinking algorithm for Idle state
-        blink_counter_++;
-        if (blink_counter_ < blink_interval_) {
-            frame_to_return = 0; // Stay at open eyes
-        } else if (blink_counter_ == blink_interval_) {
-            frame_to_return = 1; // Half-close
-        } else if (blink_counter_ == blink_interval_ + 1) {
-            frame_to_return = 2; // Fully closed
-        } else if (blink_counter_ == blink_interval_ + 2) {
-            frame_to_return = 3; // Reopening
-        } else {
-            blink_counter_ = 0;
-            // Randomize next blink interval between 20 and 45 ticks (2.0s to 4.5s)
-            blink_interval_ = 20 + (std::rand() % 25);
-            frame_to_return = 0;
-        }
-    } else {
-        // Continuous cycle for active states
-        current_frame_ = (current_frame_ + 1) % FRAMES_PER_STATE;
-    }
-
-    return &frame_dscs_[current_state_][frame_to_return];
+    RenderFrame();
+    return &frame_dsc_;
 }
 
 DasaimochiState DasaimochiAnim::MapEmotionToState(const char* emotion) {
-    if (!emotion || emotion[0] == '\0') return DASAIMOCHI_IDLE;
-
-    std::string str(emotion);
-    std::transform(str.begin(), str.end(), str.begin(), ::tolower);
-
-    if (str.find("happy") != std::string::npos || str.find("smile") != std::string::npos ||
-        str.find("laugh") != std::string::npos || str.find("excited") != std::string::npos ||
-        str.find("joy") != std::string::npos) {
-        return DASAIMOCHI_HAPPY;
-    }
-    if (str.find("thinking") != std::string::npos || str.find("wonder") != std::string::npos ||
-        str.find("processing") != std::string::npos) {
-        return DASAIMOCHI_THINKING;
-    }
-    if (str.find("listening") != std::string::npos || str.find("surprised") != std::string::npos ||
-        str.find("shocked") != std::string::npos) {
-        return DASAIMOCHI_LISTENING;
-    }
-    if (str.find("speak") != std::string::npos || str.find("talking") != std::string::npos) {
-        return DASAIMOCHI_SPEAKING;
-    }
-    if (str.find("sleep") != std::string::npos || str.find("sad") != std::string::npos ||
-        str.find("cry") != std::string::npos || str.find("offline") != std::string::npos) {
-        return DASAIMOCHI_SLEEPING;
-    }
-
+    if (!emotion) return DASAIMOCHI_IDLE;
+    std::string em = emotion;
+    if (em == "neutral" || em == "robot_1" || em == "robot_2") return DASAIMOCHI_IDLE;
+    if (em == "listening") return DASAIMOCHI_LISTENING;
+    if (em == "speaking" || em == "happy") return DASAIMOCHI_SPEAKING;
+    if (em == "thinking") return DASAIMOCHI_THINKING;
+    if (em == "excited" || em == "loving" || em == "joyful") return DASAIMOCHI_HAPPY;
+    if (em == "sleeping" || em == "sleepy") return DASAIMOCHI_SLEEPING;
     return DASAIMOCHI_IDLE;
 }
 
 DasaimochiState DasaimochiAnim::MapStatusToState(const char* status) {
-    if (!status || status[0] == '\0') return DASAIMOCHI_IDLE;
-
-    std::string str(status);
-    std::transform(str.begin(), str.end(), str.begin(), ::tolower);
-
-    if (str.find("listen") != std::string::npos || str.find("hỏi") != std::string::npos || str.find("nghe") != std::string::npos) {
+    if (!status) return DASAIMOCHI_IDLE;
+    std::string st = status;
+    if (st.find("听") != std::string::npos || st.find("Nghe") != std::string::npos || st.find("Listen") != std::string::npos) {
         return DASAIMOCHI_LISTENING;
     }
-    if (str.find("speak") != std::string::npos || str.find("talk") != std::string::npos || str.find("nói") != std::string::npos) {
+    if (st.find("说") != std::string::npos || st.find("Nói") != std::string::npos || st.find("Speak") != std::string::npos) {
         return DASAIMOCHI_SPEAKING;
     }
-    if (str.find("think") != std::string::npos || str.find("nghĩ") != std::string::npos || str.find("chờ") != std::string::npos) {
+    if (st.find("想") != std::string::npos || st.find("Nghĩ") != std::string::npos || st.find("Think") != std::string::npos) {
         return DASAIMOCHI_THINKING;
     }
-    if (str.find("sleep") != std::string::npos || str.find("ngủ") != std::string::npos || str.find("standby") != std::string::npos) {
+    if (st.find("睡") != std::string::npos || st.find("Ngủ") != std::string::npos || st.find("Sleep") != std::string::npos) {
         return DASAIMOCHI_SLEEPING;
     }
-
     return DASAIMOCHI_IDLE;
 }

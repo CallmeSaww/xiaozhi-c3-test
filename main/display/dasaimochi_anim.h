@@ -19,32 +19,30 @@ public:
     DasaimochiAnim();
     ~DasaimochiAnim();
 
-    void Init();
+    void Init(int width = 128, int height = 64);
     void SetState(DasaimochiState state);
     DasaimochiState GetState() const { return current_state_; }
 
-    // Retrieve the next frame descriptor (to be called inside LVGL lock/timer)
+    // Retrieve the next frame descriptor (called inside LVGL lock/timer)
     const lv_img_dsc_t* GetNextFrame();
 
     static DasaimochiState MapEmotionToState(const char* emotion);
     static DasaimochiState MapStatusToState(const char* status);
 
 private:
-    void GenerateFrames();
-    void ClearFrames();
+    void RenderFrame();
 
     DasaimochiState current_state_ = DASAIMOCHI_IDLE;
-    int current_frame_ = 0;
-    int blink_counter_ = 0;
-    int blink_interval_ = 25; // Blink every ~2.5 seconds (25 x 100ms)
+    int tick_count_ = 0;
+    int blink_timer_ = 0;
+    int blink_stage_ = 0; // 0=open, 1=closing, 2=closed, 3=opening
     bool initialized_ = false;
 
-    static constexpr int WIDTH = 32;
-    static constexpr int HEIGHT = 32;
-    static constexpr int FRAMES_PER_STATE = 4;
+    int width_ = 128;
+    int height_ = 64;
 
-    uint8_t* frame_buffers_[DASAIMOCHI_STATE_COUNT][FRAMES_PER_STATE] = {};
-    lv_img_dsc_t frame_dscs_[DASAIMOCHI_STATE_COUNT][FRAMES_PER_STATE] = {};
+    uint8_t* frame_buffer_ = nullptr;
+    lv_img_dsc_t frame_dsc_ = {};
 };
 
 #endif // DASAIMOCHI_ANIM_H
