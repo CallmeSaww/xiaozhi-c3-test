@@ -3,6 +3,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <algorithm>
+#include <string>
 
 #define TAG "DasaimochiAnim"
 

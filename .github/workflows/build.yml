@@ -30,7 +30,11 @@ jobs:
           git config --global --add safe.directory "*"
           source $IDF_PATH/export.sh
           idf.py set-target esp32c3
-          idf.py -DSDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.esp32c3" build
+          echo "CONFIG_BOARD_TYPE_XMINI_C3=y" >> sdkconfig
+          echo "CONFIG_PM_ENABLE=y" >> sdkconfig
+          echo "CONFIG_FREERTOS_USE_TICKLESS_IDLE=y" >> sdkconfig
+          echo "CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y" >> sdkconfig
+          idf.py build
 
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
