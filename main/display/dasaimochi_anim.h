@@ -23,6 +23,9 @@ public:
     void SetState(DasaimochiState state);
     DasaimochiState GetState() const { return current_state_; }
 
+    void SetInvert(bool invert) { invert_colors_ = invert; }
+    bool GetInvert() const { return invert_colors_; }
+
     const lv_img_dsc_t* GetNextFrame();
 
     static DasaimochiState MapEmotionToState(const char* emotion);
@@ -35,6 +38,7 @@ private:
     DasaimochiState current_state_ = DASAIMOCHI_IDLE;
     int tick_count_ = 0;
     int idle_frame_idx_ = 0;
+    bool invert_colors_ = true; // Default inverted as requested
     bool initialized_ = false;
 
     int width_ = 128;

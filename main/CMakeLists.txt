@@ -972,7 +972,7 @@ elseif(CONFIG_LANGUAGE_SR_RS)
 endif()
 
 if(NOT LANG_DIR)
-    set(LANG_DIR "en-US")
+    set(LANG_DIR "vi-VN")
 endif()
 
 # Define generation path

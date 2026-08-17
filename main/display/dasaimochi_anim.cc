@@ -210,7 +210,11 @@ void DasaimochiAnim::RenderIdleFrame() {
             int byte_idx = y * 16 + (x / 8);
             int bit_idx = 7 - (x % 8);
             uint8_t bit = (raw_frame[byte_idx] >> bit_idx) & 0x01;
-            frame_buffer_[y * width_ + x] = bit ? 0xFF : 0x00;
+            uint8_t val = bit ? 0xFF : 0x00;
+            if (invert_colors_) {
+                val = 0xFF - val;
+            }
+            frame_buffer_[y * width_ + x] = val;
         }
     }
 
@@ -313,6 +317,13 @@ void DasaimochiAnim::RenderFrame() {
 
         default:
             break;
+    }
+
+    if (invert_colors_) {
+        int total = width_ * height_;
+        for (int i = 0; i < total; i++) {
+            frame_buffer_[i] = 0xFF - frame_buffer_[i];
+        }
     }
 }
 
