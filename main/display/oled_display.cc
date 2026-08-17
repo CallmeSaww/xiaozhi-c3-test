@@ -220,7 +220,7 @@ void OledDisplay::SetupUI_128x64() {
                     lv_image_set_src(self->emotion_img_, dsc);
                 }
             }
-        }, 100, this);
+        }, 42, this);
     }
 }
 

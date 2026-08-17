@@ -23,7 +23,6 @@ public:
     void SetState(DasaimochiState state);
     DasaimochiState GetState() const { return current_state_; }
 
-    // Retrieve the next frame descriptor (called inside LVGL lock/timer)
     const lv_img_dsc_t* GetNextFrame();
 
     static DasaimochiState MapEmotionToState(const char* emotion);
@@ -31,11 +30,11 @@ public:
 
 private:
     void RenderFrame();
+    void RenderIdleFrame();
 
     DasaimochiState current_state_ = DASAIMOCHI_IDLE;
     int tick_count_ = 0;
-    int blink_timer_ = 0;
-    int blink_stage_ = 0; // 0=open, 1=closing, 2=closed, 3=opening
+    int idle_frame_idx_ = 0;
     bool initialized_ = false;
 
     int width_ = 128;

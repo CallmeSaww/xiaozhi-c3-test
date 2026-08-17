@@ -1,4 +1,5 @@
 #include "dasaimochi_anim.h"
+#include "dasaimochi_frames.h"
 #include <esp_log.h>
 #include <esp_heap_caps.h>
 #include <cstring>
@@ -35,7 +36,6 @@ void DrawFilledCircle(uint8_t* buf, int w, int h, int cx, int cy, int r, uint8_t
     }
 }
 
-// Authentic Dasai Mochi Pill Eye with smooth corner rounding
 void DrawDasaiPill(uint8_t* buf, int w, int h, int cx, int cy, int pw, int ph, uint8_t val) {
     if (pw <= 0 || ph <= 0) return;
     int x0 = cx - pw / 2;
@@ -190,20 +190,41 @@ void DasaimochiAnim::Init(int width, int height) {
     frame_dsc_.data = frame_buffer_;
 
     initialized_ = true;
-    ESP_LOGI(TAG, "DasaimochiAnim initialized with resolution %dx%d", width_, height_);
+    ESP_LOGI(TAG, "DasaimochiAnim initialized with %d idle frames, resolution %dx%d", DASAIMOCHI_TOTAL_IDLE_FRAMES, width_, height_);
 }
 
 void DasaimochiAnim::SetState(DasaimochiState state) {
     if (state != current_state_) {
         current_state_ = state;
         tick_count_ = 0;
-        blink_stage_ = 0;
-        blink_timer_ = 0;
     }
+}
+
+void DasaimochiAnim::RenderIdleFrame() {
+    if (!frame_buffer_) return;
+
+    // Unpack 1-bit monochrome frame (1024 bytes) into 8-bit LVGL buffer
+    const uint8_t* raw_frame = g_dasaimochi_frames[idle_frame_idx_];
+    for (int y = 0; y < 64; y++) {
+        for (int x = 0; x < 128; x++) {
+            int byte_idx = y * 16 + (x / 8);
+            int bit_idx = 7 - (x % 8);
+            uint8_t bit = (raw_frame[byte_idx] >> bit_idx) & 0x01;
+            frame_buffer_[y * width_ + x] = bit ? 0xFF : 0x00;
+        }
+    }
+
+    idle_frame_idx_ = (idle_frame_idx_ + 1) % DASAIMOCHI_TOTAL_IDLE_FRAMES;
 }
 
 void DasaimochiAnim::RenderFrame() {
     if (!frame_buffer_) return;
+
+    if (current_state_ == DASAIMOCHI_IDLE) {
+        RenderIdleFrame();
+        return;
+    }
+
     memset(frame_buffer_, 0, width_ * height_);
 
     int eye_dist = 50;
@@ -223,36 +244,6 @@ void DasaimochiAnim::RenderFrame() {
     tick_count_++;
 
     switch (current_state_) {
-        case DASAIMOCHI_IDLE: {
-            blink_timer_++;
-            if (blink_timer_ > 28) {
-                blink_stage_ = blink_timer_ - 28;
-                if (blink_stage_ > 3) {
-                    blink_timer_ = 0;
-                    blink_stage_ = 0;
-                }
-            } else {
-                blink_stage_ = 0;
-            }
-
-            int cur_eh = eye_h;
-            if (blink_stage_ == 1) cur_eh = (int)(eye_h * 0.45);
-            else if (blink_stage_ == 2) cur_eh = 3;
-            else if (blink_stage_ == 3) cur_eh = (int)(eye_h * 0.65);
-
-            if (cur_eh <= 3) {
-                DrawDasaiPill(frame_buffer_, width_, height_, eye_left_x, eye_y + 4, eye_w, 3, 0xFF);
-                DrawDasaiPill(frame_buffer_, width_, height_, eye_right_x, eye_y + 4, eye_w, 3, 0xFF);
-            } else {
-                DrawDasaiEye(frame_buffer_, width_, height_, eye_left_x, eye_y, eye_w, cur_eh);
-                DrawDasaiEye(frame_buffer_, width_, height_, eye_right_x, eye_y, eye_w, cur_eh);
-            }
-
-            DrawBlush(frame_buffer_, width_, height_, blush_left_x, blush_y, true);
-            DrawBlush(frame_buffer_, width_, height_, blush_right_x, blush_y, false);
-            break;
-        }
-
         case DASAIMOCHI_LISTENING: {
             DrawDasaiEye(frame_buffer_, width_, height_, eye_left_x, eye_y, eye_w + 2, eye_h + 2);
             DrawDasaiEye(frame_buffer_, width_, height_, eye_right_x, eye_y, eye_w + 2, eye_h + 2);
